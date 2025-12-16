@@ -7,6 +7,8 @@ from bs4 import BeautifulSoup
 from email.message import EmailMessage
 from urllib.parse import urljoin
 
+SLACK_WEBHOOK_URL = os.getenv("SLACK_WEBHOOK_URL")
+USE_SLACK = os.getenv("USE_SLACK", "true").lower() == "true"
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
 SMTP_USER = os.getenv("SMTP_USER")
@@ -148,6 +150,31 @@ def enviar_email_nuevos(df_nuevos, adjuntar_csv=True, csv_path="infocasas_hoy.cs
         else "Email enviado."
     )
     
+def enviar_slack_nuevos(df_nuevos):
+    if not USE_SLACK:
+        print("Slack desactivado (USE_SLACK=false).")
+        return
+    if df_nuevos.empty:
+        print("No hay propiedades nuevas, no se envía mensaje a Slack.")
+        return
+    if not SLACK_WEBHOOK_URL:
+        print("SLACK_WEBHOOK_URL no está definido.")
+        return
+
+    lineas = []
+    for _, row in df_nuevos.iterrows():
+        lineas.append(
+            f"• {row['titulo']} | {row['precio']} | {row['ubicacion']} | {row['url']}"
+        )
+
+    texto = "*Nuevos inmuebles InfoCasas (filtros diarios)*\n" + "\n".join(lineas[:20])
+
+    resp = requests.post(SLACK_WEBHOOK_URL, json={"text": texto})
+    if resp.status_code != 200:
+        raise RuntimeError(f"Error al enviar a Slack: {resp.status_code} - {resp.text}")
+    print("Mensaje enviado a Slack.")
+
+    
 def main():
     data = scrape_all_pages(max_pages=20)
     df_hoy = pd.DataFrame(data)
@@ -168,8 +195,10 @@ def main():
     df_hist_total.drop_duplicates(subset=["anuncio_id"], inplace=True)
     df_hist_total.to_csv(HIST_CSV, index=False, encoding="utf-8-sig")
     print(f"Histórico actualizado en {HIST_CSV}")
-
-    enviar_email_nuevos(df_nuevos, adjuntar_csv=True, csv_path=TODAY_CSV)
+    
+    enviar_slack_nuevos(df_nuevos)
+    
+    # enviar_email_nuevos(df_nuevos, adjuntar_csv=True, csv_path=TODAY_CSV)
 
 if __name__ == "__main__":
     main()
