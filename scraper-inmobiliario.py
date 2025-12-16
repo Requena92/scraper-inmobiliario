@@ -117,6 +117,10 @@ def enviar_email_nuevos(df_nuevos, adjuntar_csv=True, csv_path="infocasas_hoy.cs
         print("No hay propiedades nuevas, no se envía email.")
         return
 
+    if not SMTP_USER or not SMTP_PASS:
+        print("SMTP_USER o SMTP_PASS no están definidos; se omite envío de email.")
+        return
+
     filas = [
         f"- {row['titulo']} | {row['precio']} | {row['ubicacion']} | {row['url']}"
         for _, row in df_nuevos.iterrows()
@@ -126,23 +130,22 @@ def enviar_email_nuevos(df_nuevos, adjuntar_csv=True, csv_path="infocasas_hoy.cs
     msg = EmailMessage()
     msg["Subject"] = "Nuevos inmuebles InfoCasas (filtros diarios)"
     msg["From"] = SMTP_USER
-    msg["To"] = EMAIL_TO
+    msg["To"] = ", ".join([m.strip() for m in EMAIL_TO.split(",")])
     msg.set_content(body)
 
     if adjuntar_csv and os.path.exists(csv_path):
         with open(csv_path, "rb") as f:
             data = f.read()
         msg.add_attachment(
-            data,
-            maintype="text",
-            subtype="csv",
-            filename=os.path.basename(csv_path),
+            data, maintype="text", subtype="csv", filename=os.path.basename(csv_path)
         )
 
-    with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+    with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=20) as server:
         server.starttls()
         server.login(SMTP_USER, SMTP_PASS)
         server.send_message(msg)
+
+    print("Email enviado.")
 
     print(
         "Email enviado con propiedades nuevas y adjunto."
@@ -169,7 +172,7 @@ def enviar_slack_nuevos(df_nuevos):
 
     texto = "*Nuevos inmuebles InfoCasas (filtros diarios)*\n" + "\n".join(lineas[:20])
 
-    resp = requests.post(SLACK_WEBHOOK_URL, json={"text": texto})
+    resp = requests.post(SLACK_WEBHOOK_URL, json={"text": texto}, timeout=15)
     if resp.status_code != 200:
         raise RuntimeError(f"Error al enviar a Slack: {resp.status_code} - {resp.text}")
     print("Mensaje enviado a Slack.")
