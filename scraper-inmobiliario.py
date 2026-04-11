@@ -5,12 +5,12 @@ import time
 import random
 import logging
 import smtplib
-import requests
-import pandas as pd
 from datetime import date
-from bs4 import BeautifulSoup
 from email.message import EmailMessage
 from urllib.parse import urljoin
+import requests
+import pandas as pd
+from bs4 import BeautifulSoup
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -30,7 +30,6 @@ SMTP_PORT = 587
 
 BASE_URL = "https://www.infocasas.com.uy"
 SEARCH_URL_BASE = "https://www.infocasas.com.uy/venta/casas-y-apartamentos/montevideo/buceo-y-en-puerto-buceo-y-en-pocitos-nuevo-y-en-punta-carretas-y-en-pocitos-y-en-parque-batlle/2-dormitorios/2-o-mas-banos/hasta-260000/dolares"
-
 TODAY_CSV = "infocasas_hoy.csv"
 HIST_CSV = "infocasas_historico.csv"
 
