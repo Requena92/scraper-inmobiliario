@@ -40,12 +40,11 @@ SLEEP_MAX = 4.0
 
 
 def _require_env() -> dict:
-    keys = ("SMTP_USER", "SMTP_PASS", "EMAIL_TO")
-    missing = [k for k in keys if not os.getenv(k)]
-    if missing:
-        log.error("Variables de entorno faltantes: %s", ", ".join(missing))
-        sys.exit(1)
-    return {k: os.environ[k] for k in keys}
+    return {
+        "SMTP_USER": os.getenv("SMTP_USER", ""),
+        "SMTP_PASS": os.getenv("SMTP_PASS", ""),
+        "EMAIL_TO": os.getenv("EMAIL_TO", ""),
+    }
 
 
 _SESSION = requests.Session()
