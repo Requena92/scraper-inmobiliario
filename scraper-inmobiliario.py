@@ -259,7 +259,24 @@ def main() -> None:
     )
 
     # 5. Notificación
-    enviar_email_nuevos(df_nuevos, env, adjuntar_csv=True, csv_path=TODAY_CSV)
+
+
+# enviar_email_nuevos(df_nuevos, env, adjuntar_csv=True, csv_path=TODAY_CSV)
+
+slack_webhook = os.getenv("SLACK_WEBHOOK_URL")
+    if slack_webhook and not df_nuevos.empty:
+        filas = [
+            f"• {row['titulo']} | {row['precio']} | {row['ubicacion']}\n  {row['url']}"
+            for _, row in df_nuevos.iterrows()
+        ]
+        mensaje = f"*🏠 {len(df_nuevos)} propiedad(es) nueva(s) en InfoCasas — {date.today()}*\n\n" + "\n\n".join(filas)
+        try:
+            requests.post(slack_webhook, json={"text": mensaje}, timeout=10)
+            log.info("Notificación Slack enviada con %d propiedad(es).", len(df_nuevos))
+        except requests.RequestException as exc:
+            log.error("Error al enviar a Slack: %s", exc)
+    elif not slack_webhook:
+        log.warning("SLACK_WEBHOOK_URL no configurada — no se envió notificación Slack.")
 
 
 if __name__ == "__main__":
