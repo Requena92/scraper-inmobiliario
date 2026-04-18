@@ -4,9 +4,7 @@ import sys
 import time
 import random
 import logging
-import smtplib
 from datetime import date
-from email.message import EmailMessage
 from urllib.parse import urljoin
 import requests
 import pandas as pd
@@ -25,28 +23,26 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
-SMTP_SERVER = "smtp.gmail.com"
-SMTP_PORT = 587
-
 BASE_URL = "https://www.infocasas.com.uy"
-SEARCH_URL_BASE = "https://www.infocasas.com.uy/venta/casas-y-apartamentos/montevideo/buceo-y-en-puerto-buceo-y-en-pocitos-nuevo-y-en-punta-carretas-y-en-pocitos-y-en-parque-batlle/2-dormitorios/2-o-mas-banos/hasta-260000/dolares"
+SEARCH_URL_BASE = (
+    "https://www.infocasas.com.uy/venta/casas-y-apartamentos/montevideo"
+    "/buceo-y-en-puerto-buceo-y-en-pocitos-nuevo-y-en-punta-carretas"
+    "-y-en-pocitos-y-en-parque-batlle/2-dormitorios/2-o-mas-banos"
+    "/hasta-260000/dolares"
+)
+
 TODAY_CSV = "infocasas_hoy.csv"
-HIST_CSV = "infocasas_historico.csv"
+HIST_CSV  = "infocasas_historico.csv"
 
-MAX_RETRIES = 3
-BACKOFF_BASE = 4  # seconds  (backoff = BACKOFF_BASE * attempt)
-SLEEP_MIN = 1.5
-SLEEP_MAX = 4.0
-
-
-def _require_env() -> dict:
-    return {
-        "SMTP_USER": os.getenv("SMTP_USER", ""),
-        "SMTP_PASS": os.getenv("SMTP_PASS", ""),
-        "EMAIL_TO": os.getenv("EMAIL_TO", ""),
-    }
+MAX_RETRIES  = 3
+BACKOFF_BASE = 4
+SLEEP_MIN    = 1.5
+SLEEP_MAX    = 4.0
 
 
+# ---------------------------------------------------------------------------
+# HTTP
+# ---------------------------------------------------------------------------
 _SESSION = requests.Session()
 _SESSION.headers["User-Agent"] = (
     "Mozilla/5.0 (compatible; RealEstateBot/1.0; +https://tusitio.com)"
@@ -63,17 +59,16 @@ def get_page(url: str) -> BeautifulSoup | None:
             wait = BACKOFF_BASE * attempt
             log.warning(
                 "Intento %d/%d falló para %s — %s. Reintentando en %ds…",
-                attempt,
-                MAX_RETRIES,
-                url,
-                exc,
-                wait,
+                attempt, MAX_RETRIES, url, exc, wait,
             )
             time.sleep(wait)
     log.error("No se pudo obtener %s tras %d intentos. Se omite.", url, MAX_RETRIES)
     return None
 
 
+# ---------------------------------------------------------------------------
+# ID extraction
+# ---------------------------------------------------------------------------
 _ID_RE = re.compile(r"[-/](\d{5,})(?:[/?#]|$)")
 
 
@@ -84,16 +79,19 @@ def _extract_id(relative_url: str | None) -> str | None:
     return m.group(1) if m else None
 
 
+# ---------------------------------------------------------------------------
+# Parseo de una card individual
+# ---------------------------------------------------------------------------
 def parse_listing(card, scraped_date: str) -> dict:
-    link_tag = card.select_one("a.lc-data")
+    link_tag     = card.select_one("a.lc-data")
     relative_url = link_tag["href"] if link_tag and link_tag.has_attr("href") else None
-    url = urljoin(BASE_URL, relative_url) if relative_url else None
+    url          = urljoin(BASE_URL, relative_url) if relative_url else None
 
     price_tag = card.select_one(".property-price-tag p.main-price")
-    gc_tag = card.select_one(".property-price-tag span.commonExpenses")
-    loc_tag = card.select_one("strong.lc-location")
+    gc_tag    = card.select_one(".property-price-tag span.commonExpenses")
+    loc_tag   = card.select_one("strong.lc-location")
     title_tag = card.select_one("h2.lc-title")
-    desc_tag = card.select_one("p.lc-description")
+    desc_tag  = card.select_one("p.lc-description")
     owner_tag = card.select_one(".lc-owner-name")
 
     dorms = banos = m2 = None
@@ -107,24 +105,27 @@ def parse_listing(card, scraped_date: str) -> dict:
             m2 = txt
 
     return {
-        "anuncio_id": _extract_id(relative_url),
-        "url": url,
-        "precio": price_tag.get_text(strip=True) if price_tag else None,
-        "gastos_comunes": gc_tag.get_text(strip=True) if gc_tag else None,
-        "ubicacion": loc_tag.get_text(strip=True) if loc_tag else None,
-        "titulo": title_tag.get_text(strip=True) if title_tag else None,
-        "descripcion": desc_tag.get_text(" ", strip=True) if desc_tag else None,
-        "dormitorios": dorms,
-        "banos": banos,
-        "m2": m2,
-        "inmobiliaria": owner_tag.get_text(strip=True) if owner_tag else None,
+        "anuncio_id":     _extract_id(relative_url),
+        "url":            url,
+        "precio":         price_tag.get_text(strip=True)     if price_tag else None,
+        "gastos_comunes": gc_tag.get_text(strip=True)        if gc_tag    else None,
+        "ubicacion":      loc_tag.get_text(strip=True)       if loc_tag   else None,
+        "titulo":         title_tag.get_text(strip=True)     if title_tag else None,
+        "descripcion":    desc_tag.get_text(" ", strip=True) if desc_tag  else None,
+        "dormitorios":    dorms,
+        "banos":          banos,
+        "m2":             m2,
+        "inmobiliaria":   owner_tag.get_text(strip=True)     if owner_tag else None,
         "fecha_scraping": scraped_date,
     }
 
 
+# ---------------------------------------------------------------------------
+# Scraping de todas las páginas
+# ---------------------------------------------------------------------------
 def scrape_all_pages(max_pages: int = 20) -> pd.DataFrame:
     today = date.today().isoformat()
-    data = []
+    data  = []
 
     for page in range(1, max_pages + 1):
         url = SEARCH_URL_BASE if page == 1 else f"{SEARCH_URL_BASE}/pagina{page}"
@@ -151,73 +152,51 @@ def scrape_all_pages(max_pages: int = 20) -> pd.DataFrame:
     df = pd.DataFrame(data)
 
     if df.empty:
-        log.warning(
-            "No se encontró ningún aviso. Verificar si cambió el HTML del sitio."
-        )
+        log.warning("No se encontró ningún aviso. Verificar si cambió el HTML del sitio.")
         return df
 
-    # Normalizar anuncio_id: descartar "None" string y duplicados reales
     df["anuncio_id"] = df["anuncio_id"].where(df["anuncio_id"].notna())
     sin_id = df["anuncio_id"].isna().sum()
     if sin_id:
-        log.warning(
-            "%d avisos sin anuncio_id — no podrán deduplicarse correctamente.", sin_id
-        )
+        log.warning("%d avisos sin anuncio_id — no podrán deduplicarse correctamente.", sin_id)
 
     return df
 
 
-def enviar_email_nuevos(
-    df_nuevos: pd.DataFrame,
-    env: dict,
-    adjuntar_csv: bool = True,
-    csv_path: str = TODAY_CSV,
-) -> None:
+# ---------------------------------------------------------------------------
+# Notificación Slack
+# ---------------------------------------------------------------------------
+def enviar_slack(df_nuevos: pd.DataFrame) -> None:
+    slack_webhook = os.getenv("SLACK_WEBHOOK_URL")
+
+    if not slack_webhook:
+        log.warning("SLACK_WEBHOOK_URL no configurada — no se envió notificación Slack.")
+        return
+
     if df_nuevos.empty:
-        log.info("Sin propiedades nuevas — no se envía email.")
+        log.info("Sin propiedades nuevas — no se envía notificación Slack.")
         return
 
     filas = [
-        f"- {row['titulo']} | {row['precio']} | {row['ubicacion']} | {row['url']}"
+        f"• {row['titulo']} | {row['precio']} | {row['ubicacion']}\n  {row['url']}"
         for _, row in df_nuevos.iterrows()
     ]
-    body = (
-        f"Inmuebles nuevos que cumplen los filtros ({date.today()}):\n\n"
-        + "\n".join(filas)
+    mensaje = (
+        f"*🏠 {len(df_nuevos)} propiedad(es) nueva(s) en InfoCasas — {date.today()}*\n\n"
+        + "\n\n".join(filas)
     )
 
-    msg = EmailMessage()
-    msg["Subject"] = f"Nuevos inmuebles InfoCasas — {date.today()}"
-    msg["From"] = env["SMTP_USER"]
-    msg["To"] = env["EMAIL_TO"]
-    msg.set_content(body)
-
-    if adjuntar_csv and os.path.exists(csv_path):
-        with open(csv_path, "rb") as f:
-            msg.add_attachment(
-                f.read(),
-                maintype="text",
-                subtype="csv",
-                filename=os.path.basename(csv_path),
-            )
-
     try:
-        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
-            server.starttls()
-            server.login(env["SMTP_USER"], env["SMTP_PASS"])
-            server.send_message(msg)
-        log.info(
-            "Email enviado a %s con %d propiedad(es) nueva(s).",
-            env["EMAIL_TO"],
-            len(df_nuevos),
-        )
-    except smtplib.SMTPException as exc:
-        log.error("Error al enviar email: %s", exc)
+        requests.post(slack_webhook, json={"text": mensaje}, timeout=10)
+        log.info("Notificación Slack enviada con %d propiedad(es).", len(df_nuevos))
+    except requests.RequestException as exc:
+        log.error("Error al enviar a Slack: %s", exc)
 
 
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
 def main() -> None:
-    env = _require_env()
-
     # 1. Scraping
     df_hoy = scrape_all_pages(max_pages=20)
 
@@ -225,7 +204,7 @@ def main() -> None:
         log.error("Scraping retornó vacío — se aborta para no corromper el histórico.")
         sys.exit(1)
 
-    # 2. Guardar CSV del día (solo después de confirmar que hay datos)
+    # 2. Guardar CSV del día
     df_hoy.to_csv(TODAY_CSV, index=False, encoding="utf-8-sig")
     log.info("CSV de hoy guardado en %s (%d filas).", TODAY_CSV, len(df_hoy))
 
@@ -233,50 +212,26 @@ def main() -> None:
     ids_hoy = set(df_hoy["anuncio_id"].dropna().astype(str))
 
     if os.path.exists(HIST_CSV):
-        df_hist = pd.read_csv(HIST_CSV, dtype={"anuncio_id": str})
-        ids_hist = set(df_hist["anuncio_id"].dropna())
-
+        df_hist       = pd.read_csv(HIST_CSV, dtype={"anuncio_id": str})
+        ids_hist      = set(df_hist["anuncio_id"].dropna())
         nuevas_claves = ids_hoy - ids_hist
-        df_nuevos = df_hoy[df_hoy["anuncio_id"].astype(str).isin(nuevas_claves)].copy()
-
-        # Agregar solo las filas genuinamente nuevas al histórico
+        df_nuevos     = df_hoy[df_hoy["anuncio_id"].astype(str).isin(nuevas_claves)].copy()
         df_hist_total = pd.concat([df_hist, df_nuevos], ignore_index=True)
     else:
-        log.info(
-            "No existe histórico previo — todas las propiedades de hoy son 'nuevas'."
-        )
-        df_nuevos = df_hoy.copy()
+        log.info("No existe histórico previo — todas las propiedades de hoy son 'nuevas'.")
+        df_nuevos     = df_hoy.copy()
         df_hist_total = df_hoy.copy()
 
-    # 4. Deduplicar histórico (mantener la primera aparición)
+    # 4. Deduplicar histórico y guardar
     df_hist_total.drop_duplicates(subset=["anuncio_id"], keep="first", inplace=True)
     df_hist_total.to_csv(HIST_CSV, index=False, encoding="utf-8-sig")
     log.info(
         "Histórico actualizado en %s (%d filas totales, %d nuevas hoy).",
-        HIST_CSV,
-        len(df_hist_total),
-        len(df_nuevos),
+        HIST_CSV, len(df_hist_total), len(df_nuevos),
     )
 
-    # 5. Notificación
-
-
-# enviar_email_nuevos(df_nuevos, env, adjuntar_csv=True, csv_path=TODAY_CSV)
-
-slack_webhook = os.getenv("SLACK_WEBHOOK_URL")
-    if slack_webhook and not df_nuevos.empty:
-        filas = [
-            f"• {row['titulo']} | {row['precio']} | {row['ubicacion']}\n  {row['url']}"
-            for _, row in df_nuevos.iterrows()
-        ]
-        mensaje = f"*🏠 {len(df_nuevos)} propiedad(es) nueva(s) en InfoCasas — {date.today()}*\n\n" + "\n\n".join(filas)
-        try:
-            requests.post(slack_webhook, json={"text": mensaje}, timeout=10)
-            log.info("Notificación Slack enviada con %d propiedad(es).", len(df_nuevos))
-        except requests.RequestException as exc:
-            log.error("Error al enviar a Slack: %s", exc)
-    elif not slack_webhook:
-        log.warning("SLACK_WEBHOOK_URL no configurada — no se envió notificación Slack.")
+    # 5. Notificación Slack
+    enviar_slack(df_nuevos)
 
 
 if __name__ == "__main__":
