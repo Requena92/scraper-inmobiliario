@@ -29,6 +29,13 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Debug env vars
+        run: |
+          echo "SMTP_USER set: ${{ env.SMTP_USER != '' }}"
+          echo "SMTP_PASS set: ${{ env.SMTP_PASS != '' }}"
+          echo "EMAIL_TO set: ${{ env.EMAIL_TO != '' }}"
+          echo "SLACK_WEBHOOK_URL set: ${{ env.SLACK_WEBHOOK_URL != '' }}"
+
       - name: Run scraper
         run: |
           python scraper-inmobiliario.py
