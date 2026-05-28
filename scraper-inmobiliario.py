@@ -25,7 +25,7 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 BASE_URL = "https://www.infocasas.com.uy"
 SEARCH_URL_BASE = (
-    "https://www.infocasas.com.uy/venta/casas-y-apartamentos/2-o-mas-dormitorios/2-o-mas-banos/hasta-260000/dolares"
+    "https://www.infocasas.com.uy/venta/casas-y-apartamentos/2-o-mas-dormitorios/2-o-mas-banos/baratos/con-garaje/hasta-260000/dolares/m2-desde-60/edificados"
 )
 
 TODAY_CSV = "infocasas_hoy.csv"
