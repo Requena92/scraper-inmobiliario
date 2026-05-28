@@ -25,10 +25,7 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 BASE_URL = "https://www.infocasas.com.uy"
 SEARCH_URL_BASE = (
-    "https://www.infocasas.com.uy/venta/casas-y-apartamentos/montevideo"
-    "/buceo-y-en-puerto-buceo-y-en-pocitos-nuevo-y-en-punta-carretas"
-    "-y-en-pocitos-y-en-parque-batlle/2-dormitorios/2-o-mas-banos"
-    "/hasta-260000/dolares"
+    "https://www.infocasas.com.uy/venta/casas-y-apartamentos/2-o-mas-dormitorios/2-o-mas-banos/hasta-260000/dolares"
 )
 
 TODAY_CSV = "infocasas_hoy.csv"
